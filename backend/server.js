@@ -8,6 +8,12 @@ const path = require('path');
 const app = express();
 const port = 3001;
 
+// Use the specific path to the Python interpreter you found
+const PYTHON_EXECUTABLE = '/Library/Frameworks/Python.framework/Versions/3.13/bin/python3'; 
+
+// The encryption key.
+const ENCRYPTION_KEY = "NxtwaveOAKey2025!";
+
 const uploadDir = 'uploads';
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir);
@@ -18,13 +24,16 @@ const upload = multer({ dest: uploadDir + '/' });
 app.use(cors());
 app.use(express.json());
 
-const executePythonScript = (scriptPath, args, res) => {
-    const pythonProcess = spawn('python3', [scriptPath, ...args]);
-    let outputData = '';
+const executePythonScript = (scriptPath, args, res, isBinaryOutput = false) => {
+    // Add the encryption key as the last argument for scripts that need it
+    const allArgs = [...args, ENCRYPTION_KEY];
+    const pythonProcess = spawn(PYTHON_EXECUTABLE, [scriptPath, ...allArgs]);
+    
+    const chunks = [];
     let errorData = '';
 
     pythonProcess.stdout.on('data', (data) => {
-        outputData += data.toString();
+        chunks.push(data); // Collect data as buffer chunks
     });
 
     pythonProcess.stderr.on('data', (data) => {
@@ -37,17 +46,17 @@ const executePythonScript = (scriptPath, args, res) => {
             if (err) console.error(`Failed to delete temp file: ${filePath}`, err);
         }));
 
-        if (code === 0 && outputData) {
-            // Check if the output is JSON to set the correct headers
-            try {
-                JSON.parse(outputData);
-                res.setHeader('Content-Disposition', 'attachment; filename=coding_questions.json');
-                res.setHeader('Content-Type', 'application/json');
-            } catch (e) {
-                // If it's not JSON (like our Markdown), send as plain text
-                res.setHeader('Content-Type', 'text/plain');
+        if (code === 0 && chunks.length > 0) {
+            const outputBuffer = Buffer.concat(chunks);
+            if (isBinaryOutput) {
+                 res.setHeader('Content-Disposition', 'attachment; filename=coding_questions.encrypted.json');
+                 res.setHeader('Content-Type', 'application/octet-stream');
+                 res.send(outputBuffer);
+            } else {
+                 // Handle plain text output for the solutions merger
+                 res.setHeader('Content-Type', 'text/plain');
+                 res.send(outputBuffer.toString());
             }
-            res.send(outputData);
         } else {
             res.status(500).json({
                 message: "Failed to process files.",
@@ -57,7 +66,8 @@ const executePythonScript = (scriptPath, args, res) => {
     });
 };
 
-// Create endpoint (no changes)
+// --- API Endpoints ---
+
 app.post('/api/process/create', upload.fields([
     { name: 'luaFile', maxCount: 1 },
     { name: 'testcasesFile', maxCount: 1 }
@@ -68,10 +78,9 @@ app.post('/api/process/create', upload.fields([
     const luaPath = req.files.luaFile[0].path;
     const testcasesPath = req.files.testcasesFile[0].path;
     const scriptPath = path.join(__dirname, 'scripts', 'create_cq.py');
-    executePythonScript(scriptPath, [luaPath, testcasesPath], res);
+    executePythonScript(scriptPath, [luaPath, testcasesPath], res, true);
 });
 
-// Update endpoint (no changes)
 app.post('/api/process/update', upload.fields([
     { name: 'existingJson', maxCount: 1 },
     { name: 'luaFile', maxCount: 1 },
@@ -84,11 +93,9 @@ app.post('/api/process/update', upload.fields([
     const luaPath = req.files.luaFile[0].path;
     const testcasesPath = req.files.testcasesFile[0].path;
     const scriptPath = path.join(__dirname, 'scripts', 'update_cq.py');
-    executePythonScript(scriptPath, [existingJsonPath, luaPath, testcasesPath], res);
+    executePythonScript(scriptPath, [existingJsonPath, luaPath, testcasesPath], res, true);
 });
 
-
-// ### ADD THIS NEW ENDPOINT ###
 app.post('/api/process/merge', upload.fields([
     { name: 'cppFile', maxCount: 1 },
     { name: 'pyFile', maxCount: 1 },
@@ -101,9 +108,24 @@ app.post('/api/process/merge', upload.fields([
     const pyPath = req.files.pyFile[0].path;
     const javaPath = req.files.javaFile[0].path;
     const scriptPath = path.join(__dirname, 'scripts', 'merge_solutions.py');
-    executePythonScript(scriptPath, [cppPath, pyPath, javaPath], res);
-});
+    
+    const pythonProcess = spawn(PYTHON_EXECUTABLE, [scriptPath, cppPath, pyPath, javaPath]);
+    
+    let outputData = '';
+    let errorData = '';
 
+    pythonProcess.stdout.on('data', (data) => { outputData += data.toString(); });
+    pythonProcess.stderr.on('data', (data) => { errorData += data.toString(); });
+    pythonProcess.on('close', (code) => {
+        [cppPath, pyPath, javaPath].forEach(fp => fs.unlink(fp, () => {}));
+        if (code === 0) {
+            res.setHeader('Content-Type', 'text/plain');
+            res.send(outputData);
+        } else {
+            res.status(500).send(errorData);
+        }
+    });
+});
 
 app.listen(port, () => {
     console.log(`🚀 Coding Question Factory server listening at http://localhost:${port}`);

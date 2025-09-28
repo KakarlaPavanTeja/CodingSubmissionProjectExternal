@@ -1,6 +1,13 @@
-# File: backend/scripts/update_cq.py
-import json, uuid, base64, re, random, copy, sys
+import json
+import uuid
+import base64
+import re
+import random
+import copy
+import sys
+from crypto_utils import decrypt, encrypt # <-- Import both
 
+# Helper functions
 def parse_test_cases(test_cases_data):
     test_cases = []
     order_update = 1
@@ -48,9 +55,17 @@ def parse_section(content, start_marker, end_marker):
 def encode_code_to_base64(code):
     return base64.b64encode(code.encode()).decode()
 
-def main(existing_json_path, lua_path, testcases_path):
+
+def main(existing_json_path, lua_path, testcases_path, password): # <-- Add password
     try:
-        with open(existing_json_path, 'r', encoding='utf-8') as f: existing_json_data = json.load(f)
+        # DECRYPT FIRST: Read the raw encrypted bytes and decrypt them
+        with open(existing_json_path, 'rb') as f_encrypted:
+            encrypted_data = f_encrypted.read()
+        
+        decrypted_json_bytes = decrypt(encrypted_data, password)
+        existing_json_data = json.loads(decrypted_json_bytes.decode('utf-8'))
+        
+        # Now proceed with the original logic
         with open(lua_path, 'r', encoding='utf-8') as f: lua_content = f.read()
         with open(testcases_path, 'r', encoding='utf-8') as f: new_test_cases_data = json.load(f)
 
@@ -78,14 +93,21 @@ def main(existing_json_path, lua_path, testcases_path):
             elif repo['language'] == 'PYTHON39': repo['code_repository'][0]['file_content'] = encode_code_to_base64(parse_section(lua_content, "----------CODE_BASE64_PYTHON_START----------", "----------CODE_BASE64_PYTHON_END----------"))
             elif repo['language'] == 'JAVA': repo['code_repository'][0]['file_content'] = encode_code_to_base64(parse_section(lua_content, "----------CODE_BASE64_JAVA_START----------", "----------CODE_BASE64_JAVA_END----------"))
 
-        # Instead of writing to a file, print the JSON to standard output for the Node.js server.
-        print(json.dumps(existing_json_data, indent=4))
+        # ENCRYPT LAST: Convert the final JSON object to bytes and encrypt it
+        final_json_string = json.dumps(existing_json_data, indent=4)
+        final_json_bytes = final_json_string.encode('utf-8')
+        encrypted_output = encrypt(final_json_bytes, password)
+        
+        # Write the raw encrypted bytes to standard output
+        sys.stdout.buffer.write(encrypted_output)
+        
     except Exception as e:
         print(f"Error in update_cq.py: {e}", file=sys.stderr)
         sys.exit(1)
 
+
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
-        print("Usage: python update_cq.py <existing_json_path> <lua_path> <testcases_path>", file=sys.stderr)
+    if len(sys.argv) != 5: # <-- Expect 5 arguments now
+        print("Usage: python update_cq.py <existing_json> <lua_file> <testcases_file> <password>", file=sys.stderr)
         sys.exit(1)
-    main(sys.argv[1], sys.argv[2], sys.argv[3])
+    main(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])

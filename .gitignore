@@ -1,0 +1,22 @@
+# Dependencies
+/node_modules
+/frontend/node_modules
+/backend/node_modules
+
+# Python virtual environment and cache
+__pycache__/
+*.pyc
+/backend/venv 
+
+# Vite build output
+/frontend/dist
+
+# Temp files
+/backend/uploads
+
+# IDE config
+.vscode
+.idea
+
+# macOS
+.DS_Store

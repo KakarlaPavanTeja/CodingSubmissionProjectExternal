@@ -26,7 +26,7 @@ const UpdateForm = () => {
     setStatus({ type: 'loading', message: 'Updating files on the server... Please wait.' });
 
     try {
-      const response = await axios.post('https://coding-factory-backend.onrender.com/api/process/update', formData, {
+      const response = await axios.post('http://localhost:3001/api/process/update', formData, {
         responseType: 'blob',
       });
       const url = window.URL.createObjectURL(new Blob([response.data]));

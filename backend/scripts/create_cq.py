@@ -1,6 +1,13 @@
-# File: backend/scripts/create_cq.py
-import json, uuid, base64, re, random, copy, sys
+import json
+import uuid
+import base64
+import re
+import random
+import copy
+import sys
+from crypto_utils import encrypt # <-- Import encrypt
 
+# Helper functions
 def parse_test_cases(test_cases_data):
     test_cases = []
     order_update = 1
@@ -48,23 +55,23 @@ def parse_section(content, start_marker, end_marker):
 def encode_code_to_base64(code):
     return base64.b64encode(code.encode()).decode()
 
-def main(lua_filename, testcases_filename):
+
+def main(lua_filename, testcases_filename, password): # <-- Add password argument
     try:
         with open(lua_filename, 'r', encoding='utf-8') as file: content = file.read()
         with open(testcases_filename, 'r', encoding='utf-8') as tc_file: test_cases_data = json.load(tc_file)
-
+        
         difficulty_level = parse_section(content, "----------QUESTION_LEVEL_START----------", "----------QUESTION_LEVEL_END----------")
         test_cases = assign_weights(parse_test_cases(test_cases_data[0]), difficulty_level)
         question_id = str(uuid.uuid4())
         coding_details_id = str(uuid.uuid4())
-        solution_id = str(uuid.uuid4())
-
+        
         json_data = [{
             "test_cases": test_cases, "total_score": {"EASY": 20, "MEDIUM": 25, "HARD": 30}[difficulty_level],
             "question_type": "CODING", "question_asked_by_companies_info": [],
             "question": {
-                "difficulty": difficulty_level,
-                "content": parse_section(content, "----------QUESTION_DESCRIPTION_START----------", "----------QUESTION_DESCRIPTION_END----------"),
+                "difficulty": difficulty_level, 
+                "content": parse_section(content, "----------QUESTION_DESCRIPTION_START----------", "----------QUESTION_DESCRIPTION_END----------"), 
                 "short_text": parse_section(content, "----------SHORT_TEXT_START----------", "----------SHORT_TEXT_END----------"),
                 "multimedia": [], "language": "ENGLISH", "content_type": "MARKDOWN",
                 "question_id": question_id, "default_tag_names": [], "concept_tag_names": [], "metadata": None
@@ -86,14 +93,23 @@ def main(lua_filename, testcases_filename):
                 {"language": "JAVA", "time_limit_to_execute_in_seconds": 2.0}
             ]
         }]
-        # Instead of writing to a file, print the JSON to standard output for the Node.js server.
-        print(json.dumps(json_data, indent=4))
+
+        # Convert the final JSON object to a string, then to bytes for encryption
+        json_string = json.dumps(json_data, indent=4)
+        json_bytes = json_string.encode('utf-8')
+
+        # Encrypt the data
+        encrypted_output = encrypt(json_bytes, password)
+
+        # Write the raw encrypted bytes to standard output
+        sys.stdout.buffer.write(encrypted_output)
+    
     except Exception as e:
         print(f"Error in create_cq.py: {e}", file=sys.stderr)
         sys.exit(1)
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python create_cq.py <lua_file_path> <testcases_file_path>", file=sys.stderr)
+    if len(sys.argv) != 4: # Expect 4 arguments now
+        print("Usage: python create_cq.py <lua_file> <testcases_file> <password>", file=sys.stderr)
         sys.exit(1)
-    main(sys.argv[1], sys.argv[2])
+    main(sys.argv[1], sys.argv[2], sys.argv[3])
