@@ -4,15 +4,21 @@ const { spawn } = require('child_process');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+require('dotenv').config(); // <-- Loads environment variables from .env file
 
 const app = express();
 const port = 3001;
 
-// Use the specific path to the Python interpreter you found
-const PYTHON_EXECUTABLE = '/Library/Frameworks/Python.framework/Versions/3.13/bin/python3'; 
+// Load the encryption key securely from environment variables
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY;
 
-// The encryption key.
-const ENCRYPTION_KEY = "NxtwaveOAKey2025!";
+// A check to ensure the server exits if the key is missing
+if (!ENCRYPTION_KEY) {
+    console.error("FATAL ERROR: ENCRYPTION_KEY is not defined in the environment. Please check your .env file.");
+    process.exit(1);
+}
+
+const PYTHON_EXECUTABLE = '/Library/Frameworks/Python.framework/Versions/3.13/bin/python3';
 
 const uploadDir = 'uploads';
 if (!fs.existsSync(uploadDir)) {
@@ -25,7 +31,6 @@ app.use(cors());
 app.use(express.json());
 
 const executePythonScript = (scriptPath, args, res, isBinaryOutput = false) => {
-    // Add the encryption key as the last argument for scripts that need it
     const allArgs = [...args, ENCRYPTION_KEY];
     const pythonProcess = spawn(PYTHON_EXECUTABLE, [scriptPath, ...allArgs]);
     
@@ -33,7 +38,7 @@ const executePythonScript = (scriptPath, args, res, isBinaryOutput = false) => {
     let errorData = '';
 
     pythonProcess.stdout.on('data', (data) => {
-        chunks.push(data); // Collect data as buffer chunks
+        chunks.push(data);
     });
 
     pythonProcess.stderr.on('data', (data) => {
@@ -53,7 +58,6 @@ const executePythonScript = (scriptPath, args, res, isBinaryOutput = false) => {
                  res.setHeader('Content-Type', 'application/octet-stream');
                  res.send(outputBuffer);
             } else {
-                 // Handle plain text output for the solutions merger
                  res.setHeader('Content-Type', 'text/plain');
                  res.send(outputBuffer.toString());
             }
@@ -65,8 +69,6 @@ const executePythonScript = (scriptPath, args, res, isBinaryOutput = false) => {
         }
     });
 };
-
-// --- API Endpoints ---
 
 app.post('/api/process/create', upload.fields([
     { name: 'luaFile', maxCount: 1 },
