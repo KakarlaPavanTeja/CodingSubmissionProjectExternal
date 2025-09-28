@@ -18,7 +18,7 @@ if (!ENCRYPTION_KEY) {
     process.exit(1);
 }
 
-const PYTHON_EXECUTABLE = '/Library/Frameworks/Python.framework/Versions/3.13/bin/python3';
+const PYTHON_EXECUTABLE = 'python3';
 
 const uploadDir = 'uploads';
 if (!fs.existsSync(uploadDir)) {
