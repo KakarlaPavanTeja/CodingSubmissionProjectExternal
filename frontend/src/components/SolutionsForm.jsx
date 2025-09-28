@@ -43,7 +43,7 @@ const SolutionsForm = () => {
     setStatus({ type: 'loading', message: 'Generating Markdown on the server...' });
 
     try {
-      const response = await axios.post('http://localhost:3001/api/process/merge', formData);
+      const response = await axios.post('https://cq-factory-backend.onrender.com/api/process/merge', formData);
       setMarkdown(response.data);
       setStatus({ type: 'success', message: 'Markdown generated successfully!' });
     } catch (error) {
